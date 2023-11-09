@@ -1,0 +1,12 @@
+# Python
+__pycache__
+*.py[cod]
+venv
+
+# Data
+data
+
+# Temporary files
+work_dirs
+tmp
+out
