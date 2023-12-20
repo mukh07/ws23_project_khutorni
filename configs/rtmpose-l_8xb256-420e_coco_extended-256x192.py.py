@@ -126,7 +126,7 @@ model = dict(
     head=dict(
         type='RTMCCHead',
         in_channels=1024,
-        out_channels=21,
+        out_channels=23,
         input_size=codec['input_size'],
         in_featuremap_size=tuple([s // 32 for s in codec['input_size']]),
         simcc_split_ratio=codec['simcc_split_ratio'],
@@ -151,6 +151,8 @@ model = dict(
 # base dataset settings
 data_mode = 'topdown'
 data_root = 'data/coco/'
+dataset_type = 'CocoExtendedDataset'
+
 
 backend_args = dict(backend='local')
 # backend_args = dict(
