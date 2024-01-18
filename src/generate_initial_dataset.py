@@ -2,10 +2,9 @@ import argparse
 import json
 import os
 import zipfile
-
-
+from itertools import chain
+from PIL import Image
 from mmpose.apis import MMPoseInferencer
-
 
 coco_keypoints = [
     "nose",
@@ -27,7 +26,6 @@ coco_keypoints = [
     "right_ankle"
 ]
 
-
 mpii_keypoints = [
     "right_ankle",
     "right_knee",
@@ -46,7 +44,6 @@ mpii_keypoints = [
     "left_elbow",
     "left_wrist"
 ]
-
 
 coco_to_mpii_index_mapping = {
     0: -1,
@@ -68,13 +65,11 @@ coco_to_mpii_index_mapping = {
     16: 0,
 }
 
-
 mpii_indices = range(16)
 mpii_indices_mapped = coco_to_mpii_index_mapping.values()
 mpii_indices_unmapped = [
     i for i in mpii_indices if i not in mpii_indices_mapped]
 new_keypoints = [mpii_keypoints[i] for i in mpii_indices_unmapped]
-
 
 extended_keypoints = coco_keypoints + new_keypoints
 extended_skeleton = [
@@ -176,7 +171,7 @@ def compute_iou(bbox1, bbox2):
 
     # Compute the intersection over union by taking the intersection area and dividing it by the sum of prediction + ground-truth areas - the intersection area
     iou = intersection_area / \
-        float(bbox1_area + bbox2_area - intersection_area)
+          float(bbox1_area + bbox2_area - intersection_area)
 
     # return the intersection over union value
     return iou
@@ -290,9 +285,9 @@ def merge_annotations(coco_annotations, mpii_annotations, min_bbox_overlap=0.75)
             spine_2_x = pelvis[0] + 2 * (thorax[0] - pelvis[0]) / 3
             spine_2_y = pelvis[1] + 2 * (thorax[1] - pelvis[1]) / 3
             spine_2_score = pelvis_score + 2 * \
-                (thorax_score - pelvis_score) / 3
+                            (thorax_score - pelvis_score) / 3
             spine_2 = [spine_2_x, spine_2_y]
-            
+
             extended_kpts.extend([spine_1, spine_2])
             extended_scores.extend([spine_1_score, spine_2_score])
 
@@ -376,103 +371,227 @@ def convert_to_coco_json(annotations):
     return coco_style_annotations
 
 
+def get_cropped_image_path(tmp_image_dir, annotation):
+    image_id = annotation['image_id']
+    annotation_id = annotation['id']
+    return image_id, f'{tmp_image_dir}/{image_id}-{annotation_id}.jpg'
+
+
 def main(args):
     coco_path = args.coco_path
     coco_split = args.coco_split
     folder_path = os.path.join(coco_path, coco_split)
     print('Processing images from:', folder_path)
 
-    # Generate the COCO annotations.
-    print('Predicting 17 keypoints using the COCO model...')
-    coco_model = 'human'
-    coco_annotations_path = f'./tmp/{coco_split}/coco'
-    generate_annotations(coco_model, folder_path, coco_annotations_path)
+    image_dir = f'data/coco/{coco_split}'
+    tmp_image_dir = f'.tmp/{coco_split}'
 
-    # Generate the MPII annotations.
-    print('Predicting 16 keypoints using the MPII model...')
+    # Load the COCO annotations.
+    print('Loading COCO annotations ...')
+    with open(f'data/coco/annotations/person_keypoints_{coco_split}.json') as f:
+        coco_data = json.load(f)
+        coco_annotations = coco_data['annotations']
+
+    # Instantiate the inferencer.
     mpii_model = 'rtmpose-m_8xb64-210e_mpii-256x256'
     mpii_annotations_path = f'./tmp/{coco_split}/mpii'
-    generate_annotations(mpii_model, folder_path, mpii_annotations_path)
+    inferencer = MMPoseInferencer(pose2d=mpii_model)
 
-    # Load predicted annotations.
-    coco_annotations, num_coco_predictions = load_annotations(
-        coco_annotations_path)  # 17 keypoints (COCO)
-    mpii_annotations, num_mpii_predictions = load_annotations(
-        mpii_annotations_path)  # 16 keypoints (MPII)
+    extended_annotations = []
+    # Run the inferencer for each annotation.
+    for i, annotation in enumerate(coco_annotations):
+        print(f'Annotation {i}')
+        # Get image data
+        image_id, cropped_image_path = get_cropped_image_path(tmp_image_dir, annotation)
+        bbox = annotation['bbox']
+        x, y, width, height = bbox
 
-    print('Number of annotations from COCO model:', num_coco_predictions)
-    print('Number of annotations from MPII model:', num_mpii_predictions)
+        if width <= 0 or height <= 0:
+            continue
 
-    # Remove invalid predictions.
-    clean_kwargs = {
-        'min_keypoints': args.min_keypoints,
-        'min_keypoint_score': args.min_keypoint_score,
-        'min_bbox_area': args.min_bbox_area,
-        'min_bbox_score': args.min_bbox_score,
-    }
-    cleaned_coco_annotations = remove_invalid_predictions(
-        coco_annotations, **clean_kwargs)
-    cleaned_mpii_annotations = remove_invalid_predictions(
-        mpii_annotations, **clean_kwargs)
+        # Crop image
+        img = Image.open(f'{image_dir}/{image_id:012d}.jpg')
+        cropped = img.crop((x, y, x + width, y + height))
+        cropped.save(cropped_image_path)
 
-    # Merge the annotations from the two models.
-    merged_annotations = merge_annotations(
-        cleaned_coco_annotations,
-        cleaned_mpii_annotations,
-        args.min_bbox_overlap,
-    )
+        # Generate the MPII annotation
+        result_generator = inferencer([cropped_image_path], pred_out_dir=mpii_annotations_path)
+        mpii_ann = next(result_generator)
 
-    # At this point, we have merged annotations in MMPose format, which we need to
-    # convert to COCO format. The COCO format is a list of dictionaries, where each
-    # dictionary represents a single detection.
-    merged_annotation = convert_to_coco_json(merged_annotations)
+        # Extract relevant keypoints
+        predictions = mpii_ann['predictions'][0][0]
+        keypoints = predictions['keypoints']
+        keypoint_scores = predictions['keypoint_scores']
 
-    # Read the split info from the original COCO annotations.
-    annotations_filename = f'person_keypoints_{coco_split}.json'
-    split_annotations_path = os.path.join(coco_path, 'annotations',
-                                          annotations_filename)
-    with open(split_annotations_path, 'r') as f:
-        original_coco_annotations = json.load(f)
-    info = original_coco_annotations['info']
-    licenses = original_coco_annotations['licenses']
-    images = original_coco_annotations['images']
-    print("Number of original COCO annotations:", len(original_coco_annotations['annotations']))
+        #TODO: Testing
+        print(predictions)
 
-    # Create the extended COCO annotations dictionary.
-    coco_extended = {
-        "info": info,
-        "licenses": licenses,
-        "images": images,
-        "annotations": merged_annotation,
-        "categories": [{
-            "supercategory": "person",
-            "id": 1,
-            "name": "person",
-            "keypoints": [str(i) for i in range(1, 24)],
-            "skeleton": [
+        pelvis, thorax, upper_neck, head_top = keypoints[6:10]
+        pelvis_score, thorax_score, upper_neck_score, head_top_score = keypoint_scores[6:10]
+        print("Relevant keypoint scores", keypoint_scores[6:10])
+
+        spine_1_x = pelvis[0] + (thorax[0] - pelvis[0]) / 3
+        spine_1_y = pelvis[1] + (thorax[1] - pelvis[1]) / 3
+        spine_1_score = pelvis_score + (thorax_score - pelvis_score) / 3
+        spine_1 = [spine_1_x, spine_1_y]
+
+        spine_2_x = pelvis[0] + 2 * (thorax[0] - pelvis[0]) / 3
+        spine_2_y = pelvis[1] + 2 * (thorax[1] - pelvis[1]) / 3
+        spine_2_score = pelvis_score + 2 * (thorax_score - pelvis_score) / 3
+        spine_2 = [spine_2_x, spine_2_y]
+
+        full_spine = [
+            [pelvis, pelvis_score],
+            [spine_1, spine_1_score],
+            [spine_2, spine_2_score],
+            [thorax, thorax_score],
+            [upper_neck, upper_neck_score],
+            [head_top, head_top_score],
+        ]
+        print("\nFULL SPINE:", full_spine)
+        full_spine_with_visibility = []
+        for [x_coord, y_coord], score in full_spine:
+            print(x_coord, y_coord, score)
+            # Translate keypoints to original image coordinates
+            full_spine_with_visibility.append([
+                x_coord + x,
+                y_coord + y,
+                1 if score < 0.5 else 2
+            ])
+
+        print("\nFULL SPINE W VIS:", full_spine_with_visibility)
+
+        # Add new keypoints to COCO annotation.
+        extended_ann = annotation
+        extended_ann['keypoints'].extend(full_spine_with_visibility)
+        extended_ann['num_keypoints'] += len(full_spine_with_visibility) / 3
+        extended_annotations.append(annotation)
+        print("\nEXTENDED ANN", extended_ann)
+        print("\nANNOTATION", extended_ann)
+
+        # Delete tmp image
+        os.remove(cropped_image_path)
+        return
+
+
+    # Write extendend annotations to file
+    with open(f'data/coco-extended/person_keypoints_{coco_split}.json', "w") as f:
+        extended_coco = coco_data
+        extended_coco['annotations'] = extended_annotations
+        extended_coco['categories'][0]['keypoints'] = [
+                "nose",
+                "left_eye",
+                "right_eye",
+                "left_ear",
+                "right_ear",
+                "left_shoulder",
+                "right_shoulder",
+                "left_elbow",
+                "right_elbow",
+                "left_wrist",
+                "right_wrist",
+                "left_hip",
+                "right_hip",
+                "left_knee",
+                "right_knee",
+                "left_ankle",
+                "right_ankle",
+                "pelvis",
+                "lower_spine",
+                "upper_spine",
+                "thorax",
+                "upper_neck",
+                "head_top"
+            ]
+        extended_coco['categories'][0]['skeleton'] = [
                 [16, 14], [14, 12], [17, 15], [15, 13], [12, 18], [18, 13],
                 [6, 12], [7, 13], [7, 19], [19, 6], [6, 8], [7, 9], [8, 10],
                 [9, 11], [2, 3], [1, 2], [1, 3], [2, 4], [3, 5], [4, 6],
                 [5, 7], [18, 22], [22, 23], [23, 19], [19, 20], [20, 21]
             ]
-        }]
-    }
 
-    # Save the extended COCO annotations.
-    save_dir = args.save_path
-    os.makedirs(save_dir, exist_ok=True)
-    json_file = os.path.join(save_dir, annotations_filename)
-    with open(json_file, 'w') as f:
-        json.dump(coco_extended, f)
+        json.dump(extended_coco, f)
 
-    # Archive the annotations in a ZIP file for loading into CVAT.
-    archive_path = os.path.join(save_dir, f'{coco_split}.zip')
-    with zipfile.ZipFile(archive_path, 'w') as zip_file:
-        arcname = os.path.join('annotations', annotations_filename)
-        zip_file.write(json_file, arcname=arcname)
-
-    # Print the number of annotations
-    print('Number of combined annotations:', len(merged_annotation))
+    #
+    # # Load predicted annotations.
+    # coco_annotations, num_coco_predictions = load_annotations(
+    #     coco_annotations_path)  # 17 keypoints (COCO)
+    # mpii_annotations, num_mpii_predictions = load_annotations(
+    #     mpii_annotations_path)  # 16 keypoints (MPII)
+    #
+    # print('Number of annotations from COCO model:', num_coco_predictions)
+    # print('Number of annotations from MPII model:', num_mpii_predictions)
+    #
+    # # Remove invalid predictions.
+    # clean_kwargs = {
+    #     'min_keypoints': args.min_keypoints,
+    #     'min_keypoint_score': args.min_keypoint_score,
+    #     'min_bbox_area': args.min_bbox_area,
+    #     'min_bbox_score': args.min_bbox_score,
+    # }
+    # cleaned_coco_annotations = remove_invalid_predictions(
+    #     coco_annotations, **clean_kwargs)
+    # cleaned_mpii_annotations = remove_invalid_predictions(
+    #     mpii_annotations, **clean_kwargs)
+    #
+    # # Merge the annotations from the two models.
+    # merged_annotations = merge_annotations(
+    #     cleaned_coco_annotations,
+    #     cleaned_mpii_annotations,
+    #     args.min_bbox_overlap,
+    # )
+    #
+    # # At this point, we have merged annotations in MMPose format, which we need to
+    # # convert to COCO format. The COCO format is a list of dictionaries, where each
+    # # dictionary represents a single detection.
+    # merged_annotation = convert_to_coco_json(merged_annotations)
+    #
+    # # Read the split info from the original COCO annotations.
+    # annotations_filename = f'person_keypoints_{coco_split}.json'
+    # split_annotations_path = os.path.join(coco_path, 'annotations',
+    #                                       annotations_filename)
+    # with open(split_annotations_path, 'r') as f:
+    #     original_coco_annotations = json.load(f)
+    # info = original_coco_annotations['info']
+    # licenses = original_coco_annotations['licenses']
+    # images = original_coco_annotations['images']
+    # print("Number of original COCO annotations:", len(original_coco_annotations['annotations']))
+    #
+    # # Create the extended COCO annotations dictionary.
+    # coco_extended = {
+    #     "info": info,
+    #     "licenses": licenses,
+    #     "images": images,
+    #     "annotations": merged_annotation,
+    #     "categories": [{
+    #         "supercategory": "person",
+    #         "id": 1,
+    #         "name": "person",
+    #         "keypoints": [str(i) for i in range(1, 24)],
+    #         "skeleton": [
+    #             [16, 14], [14, 12], [17, 15], [15, 13], [12, 18], [18, 13],
+    #             [6, 12], [7, 13], [7, 19], [19, 6], [6, 8], [7, 9], [8, 10],
+    #             [9, 11], [2, 3], [1, 2], [1, 3], [2, 4], [3, 5], [4, 6],
+    #             [5, 7], [18, 22], [22, 23], [23, 19], [19, 20], [20, 21]
+    #         ]
+    #     }]
+    # }
+    #
+    # # Save the extended COCO annotations.
+    # save_dir = args.save_path
+    # os.makedirs(save_dir, exist_ok=True)
+    # json_file = os.path.join(save_dir, annotations_filename)
+    # with open(json_file, 'w') as f:
+    #     json.dump(coco_extended, f)
+    #
+    # # Archive the annotations in a ZIP file for loading into CVAT.
+    # archive_path = os.path.join(save_dir, f'{coco_split}.zip')
+    # with zipfile.ZipFile(archive_path, 'w') as zip_file:
+    #     arcname = os.path.join('annotations', annotations_filename)
+    #     zip_file.write(json_file, arcname=arcname)
+    #
+    # # Print the number of annotations
+    # print('Number of combined annotations:', len(merged_annotation))
 
 
 if __name__ == '__main__':
