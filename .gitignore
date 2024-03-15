@@ -9,6 +9,6 @@ data
 # Temporary files
 work_dirs
 tmp
+out
 .tmp
 mmpose
-out
