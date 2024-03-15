@@ -1,0 +1,20 @@
+[
+    {
+        "name": "Coco23Dataset",
+        "num_keypoints": 23,
+        "skeleton_file": "configs/datasets/coco-23.svg",
+        "models": [
+            {
+                "name": "RTMPose",
+                "variant_keys": ["rtmpose-t", "rtmpose-s", "rtmpose-m", "rtmpose-l"],
+                "variant_names": ["RTMPose-T", "RTMPose-S", "RTMPose-M", "RTMPose-L"],
+                "configs": [
+                    "configs/models/rtmpose-t_8xb256-420e_coco23-256x192.py",
+                    "configs/models/rtmpose-s_8xb256-420e_coco23-256x192.py",
+                    "configs/models/rtmpose-s_8xb256-420e_coco23-256x192.py",
+                    "configs/models/rtmpose-l_8xb256-420e_coco23-256x192.py"
+                ]
+            }
+        ]
+    }
+]
