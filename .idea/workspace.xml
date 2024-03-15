@@ -5,11 +5,15 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="4be8e68a-d5f1-47bb-b514-ccdbafe439f7" name="Changes" comment="[#171] Import a batch in CVAT&#10;&#10;http://mindgarage07.cs.uni-kl.de:8001/projects/work_packages/171">
-      <change afterPath="$PROJECT_DIR$/.tmp/train2017/36-124584.jpg" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.vscode/launch.json" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/cvat/.env" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/cvat/coco23.svg" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/translate.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/translate.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cals/cals-server/VERSION" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cals/cals-server/cals_server/app.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cals/cals-server/requirements.txt" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cals/cals-server/setup.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cals/cals-sdk/cals_sdk/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/cals/cals-sdk/cals_sdk/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cals/cals-sdk/cals_sdk/cvat/cvat_client.py" beforeDir="false" afterPath="$PROJECT_DIR$/cals/cals-sdk/cals_sdk/cvat/cvat_client.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cals/cals-sdk/cals_sdk/workflows.py" beforeDir="false" afterPath="$PROJECT_DIR$/cals/cals-sdk/cals_sdk/workflow.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cals/cals-server/cals_server/apis.py" beforeDir="false" afterPath="$PROJECT_DIR$/cals/cals-server/cals_server/apis.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -43,7 +47,7 @@
     &quot;Python.split_into_batches.executor&quot;: &quot;Run&quot;,
     &quot;RunOnceActivity.OpenProjectViewOnStart&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;task/162-use-cvat-sdk-to-automatically-annotate-images-with-an-mmpose-model&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;cals&quot;,
     &quot;last_opened_file_path&quot;: &quot;/home/khutorni/project/ws23_project_khutorni&quot;,
     &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
     &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
@@ -128,6 +132,8 @@
       <workItem from="1706013774828" duration="1578000" />
       <workItem from="1706212272431" duration="5000" />
       <workItem from="1707299450729" duration="6000" />
+      <workItem from="1710410812906" duration="13000" />
+      <workItem from="1710411089142" duration="1221000" />
     </task>
     <task id="LOCAL-00001" summary="feat: Updated generation, added parts of the pipeline">
       <option name="closed" value="true" />

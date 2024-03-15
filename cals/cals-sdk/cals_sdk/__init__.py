@@ -5,4 +5,4 @@ from .datasets import Dataset
 from .models import Model, Models
 from .projects import Projects
 from .skeletons import Skeletons
-from .workflows import Workflow, Workflows
+from .workflow import Workflow, Workflows

@@ -28,13 +28,24 @@ class CVATClient(Client):
         self.host = host.strip().rstrip('/')
         super().__init__(self.host)
 
-    def authenticate(self, username, password) -> bool:
+    def authenticate(self, username, password) -> dict:
         super().login(credentials=(username, password))
-        return self.has_credentials()
+        success = self.has_credentials()
+        auth_header = self.api_client.default_headers['Authorization']
+        return {
+            "success": success,
+            "auth_token": auth_header.split(" ")[-1]
+        }
 
     def clear_auth_token(self) -> None:
         """ Clears the authentication token. """
         super().logout()
+
+    def get_project(self, project_id: int) -> Project:
+        if not self.has_credentials():
+            raise ValueError("No credentials set")
+
+        return self.projects.retrieve(project_id)
 
     def get_projects(self) -> List[Project]:
         if not self.has_credentials():
@@ -42,7 +53,9 @@ class CVATClient(Client):
 
         # TODO: List all projects owned by current user ONLY
         # See CVAT SDK docs for more info
-        return []
+        current_user = self.users.retrieve_current_user()
+        projects: List[Project] = self.projects.list()
+        return [p for p in projects if p.owner.id == current_user.id]
 
     def get_assigned_projects(self) -> List[Project]:
         if not self.has_credentials():
@@ -50,7 +63,17 @@ class CVATClient(Client):
 
         # TODO: List all projects assigned to the current user ONLY
         # See CVAT SDK docs for more info
-        return []
+        current_user = self.users.retrieve_current_user()
+        projects: List[Project] = self.projects.list()
+        return [p for p in projects if p.assignee.id == current_user.id]
+
+    def create_project(self, name: str, dataset: str) -> int:
+        if not self.has_credentials():
+            raise ValueError("No credentials set")
+
+        self.projects.create({
+            "name": name
+        })
 
     def get_project_tasks(self, project_id: int) -> List[Task]:
         if not self.has_credentials():
@@ -65,7 +88,7 @@ class CVATClient(Client):
 
         # TODO: Get task data
         # See CVAT SDK docs for more info
-        return None
+        return self.tasks.retrieve(task_id)
 
     def upload_task_data(self, name, images_zip, annotations_file,
                          project_id: int, assignee_id=None):
