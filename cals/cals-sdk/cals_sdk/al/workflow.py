@@ -1,10 +1,16 @@
+import datetime
+import glob
 import os
+from pathlib import Path
 import json
+from typing import List, Optional
 import random
 import shutil
 from zipfile import ZipFile
 
+from cals_sdk.al.annotator import KeypointAnnotator
 from cals_sdk.al.datasets import KeypointDataset
+from src.datasets.datasets.body.coco_extended_dataset import CocoExtendedDataset
 from cals_sdk.cvat import CVATClient
 
 
@@ -21,9 +27,13 @@ class ActiveLearningWorkflow:
         data_cfg: Keyword arguments to be passed to the dataset.
     """
 
-    def __init__(self, client: CVATClient, root, anno_file, model, batch_size, project_id, work_dir, data_cfg={}):
+    # coco_extended_model = "configs/rtmpose-l_8xb256-420e_coco_extended-256x192.py.py"
+    # inferencer = MMPoseInferencer(pose2d=coco_extended_model)
+
+    def __init__(self, client: CVATClient, root, anno_file, model, batch_size,project_id, work_dir,
+                 data_cfg={}, description=None, query_strategy="aggregate-threshold-uncertainty-sampling"):
         self.client = client
-        self.model = model
+        self.model = "/home/khutorni/project/ws23_project_khutorni/configs/rtmpose-l_8xb256-420e_coco_extended-256x192.py.py"
         self.dataset = KeypointDataset(root, anno_file)
         self.batch_size = batch_size
         self.project_id = project_id
@@ -44,6 +54,73 @@ class ActiveLearningWorkflow:
         if self.status == 'init':
             self._init_batches()
             self.status = 'ready'
+
+        self._save_workflows_metadata(model, description, query_strategy)
+
+    def _save_workflows_metadata(self, model: str, description: Optional[str], query_strategy: str):
+        workflows_file = '/home/khutorni/project/ws23_project_khutorni/data/workflows.json'
+        with open(workflows_file, "r+") as f:
+            try:
+                workflows_data = json.load(f)  # Load existing data
+            except json.JSONDecodeError:
+                workflows_data = {"workflows": []}  # Default value if file is empty or invalid
+
+            workflows = workflows_data['workflows']
+            name = Path(self.work_dir).name
+            this_workflow_index = next((i for i, w in enumerate(workflows) if w['name'] == name), None)
+            this_workflow_data = dict(
+                name=name,
+                project_id=self.project_id,
+                batch_size=self.batch_size,
+                model=model,
+                description=description,
+                query_strategy=query_strategy,
+            )
+            if this_workflow_index is not None:
+                this_workflow_data['created_at'] = workflows[this_workflow_index]['created_at']
+                this_workflow_data['description'] = workflows[this_workflow_index]['description']
+                this_workflow_data['query_strategy'] = workflows[this_workflow_index]['query_strategy']
+                workflows[this_workflow_index] = this_workflow_data
+            else:
+                this_workflow_data['created_at'] = datetime.datetime.now().isoformat()
+                workflows.append(this_workflow_data)
+
+            f.seek(0)  # Seek to the start of the file before writing
+            f.truncate()  # Truncate the file to overwrite it
+            json.dump(dict(workflows=workflows), f)  # Dump the updated data back into the file
+
+    @staticmethod
+    def get_all_workflows_metadata() -> List[dict]:
+        data_folder = '/home/khutorni/project/ws23_project_khutorni/data'
+        workflows_file = data_folder + '/workflows.json'
+        with open(workflows_file, "r") as f:
+            workflows = json.load(f)['workflows']
+
+        enriched_workflows = []
+        for w in workflows:
+            w_folder = f"{data_folder}/{w['name']}"
+            completed = len(glob.glob(f'{w_folder}/completed/*.zip'))
+            queued = len(glob.glob(f'{w_folder}/queued/*.json'))
+            selected_json_files = glob.glob(f'{w_folder}/selected/*.json')
+            if len(selected_json_files) > 0:
+                selected = int(
+                    Path(selected_json_files[0]).name.__str__()[len('batch_'):-len('.json')]
+                )
+            else:
+                selected = None
+            with open(f"{w_folder}/metadata.json") as wf:
+                metadata = json.load(wf)
+
+            w['model'] = Path(w['model']).name.split(".")[0]
+            enriched_workflows.append(dict(
+                **w,
+                completed=completed,
+                queued=queued,
+                selected=selected,
+                metadata=metadata
+            ))
+
+        return enriched_workflows
 
     def _create_work_dirs(self):
         """
@@ -239,6 +316,7 @@ class ActiveLearningWorkflow:
         good_annos = {
             'info': batch_dataset.coco.dataset['info'],
             'licenses': batch_dataset.coco.dataset['licenses'],
+            'categories': batch_dataset.coco.dataset['categories'],
             'images': batch_dataset.coco.dataset['images'],
             'annotations': good
         }
@@ -246,6 +324,7 @@ class ActiveLearningWorkflow:
         bad_annos = {
             'info': batch_dataset.coco.dataset['info'],
             'licenses': batch_dataset.coco.dataset['licenses'],
+            'categories': batch_dataset.coco.dataset['categories'],
             'images': batch_dataset.coco.dataset['images'],
             'annotations': bad
         }
@@ -270,6 +349,10 @@ class ActiveLearningWorkflow:
         """
         Runs the model on the batch dataset.
         """
+        model = KeypointAnnotator(
+            "/home/khutorni/project/ws23_project_khutorni/configs/rtmpose-l_8xb256-420e_coco_extended-256x192.py.py",
+            "/home/khutorni/project/ws23_project_khutorni/.tmp/checkpoint"
+        )
         predictions = []
         for _, target in batch_dataset:
             if len(target) == 0:
@@ -287,8 +370,9 @@ class ActiveLearningWorkflow:
             if file_name is None:
                 raise Exception(f'Could not find image with id {image_id}.')
 
+
             image_path = os.path.join(batch_dataset.root, file_name)
-            prediction = self.model.predict(image_path, target, filter_indices, filter_threshold)
+            prediction = model.predict(image_path, target, filter_indices, filter_threshold)
             predictions.extend(prediction)
         return predictions
 
@@ -308,7 +392,6 @@ class ActiveLearningWorkflow:
 
         self._update_metadata('current_task', task_id)
         return task_id
-
 
     def _zip_batch_images(self, anno_file, batch_idx):
         """

@@ -41,6 +41,7 @@ class KeypointDataset(ActiveDatasetWrapper):
         return {
             'info': self.coco.dataset['info'],
             'licenses': self.coco.dataset['licenses'],
+            'categories': self.coco.dataset['categories'],
             'images': batch_images,
             'annotations': batch_annos,
         }
