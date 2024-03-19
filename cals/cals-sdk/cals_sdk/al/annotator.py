@@ -5,6 +5,9 @@ import torch
 import numpy as np
 import torch.nn as nn
 from mmpose.apis import MMPoseInferencer
+from mmpose.codecs.utils import get_simcc_maximum
+from src.datasets.datasets.body.coco_extended_dataset import CocoExtendedDataset
+# from src.datasets.datasets.body.coco_extended_dataset import CocoExtendedDataset
 
 
 class KeypointAnnotator(nn.Module):
@@ -16,7 +19,8 @@ class KeypointAnnotator(nn.Module):
     def __init__(self, config, checkpoint, device='cuda'):
         super().__init__()
         self._device = torch.device(device)
-        self._model = MMPoseInferencer(config, checkpoint, device=device)
+        # self._model = MMPoseInferencer(pose2d=config, pose2d_weights=checkpoint, device=device)
+        self._model = MMPoseInferencer(config, device=device)
 
     def forward(self, image_path: str, **kwargs):
         result_generator = self._model(image_path, **kwargs)
@@ -24,7 +28,7 @@ class KeypointAnnotator(nn.Module):
 
     def predict(self, image_path: str, annos: list, 
                 filter_indices: list = None,
-                filter_threshold: float = 0.5):
+                filter_threshold: float = 8):
         image = cv2.imread(image_path, cv2.IMREAD_COLOR)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
@@ -58,13 +62,17 @@ class KeypointAnnotator(nn.Module):
                 keypoints, scores = result['keypoints'], result['keypoint_scores']
                 keypoints = np.array(keypoints)
                 scores = np.array(scores)
+                # print("Scores", scores)
 
                 # Filter the keypoints
                 if filter_indices is None:
                     filter_indices = list(range(len(keypoints)))
+                # print("FILTER INDICES", scores[filter_indices])
 
                 # Compute average score based on the filtered indices
                 avg_score = np.mean(scores[filter_indices])
+                # avg_score = min(0, avg_score - 3) / max(1, 8 - avg_score)  # attempting to normalize scores
+                # print("AVERAGE SCORE", avg_score)
 
                 # Compute a good/bad attribute based on the average score
                 good = avg_score >= filter_threshold

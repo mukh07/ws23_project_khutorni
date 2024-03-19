@@ -1,45 +1,30 @@
 <script lang="ts">
-	import Card from '$lib/components/Card.svelte';
+	import {Card} from '$lib/components/ui/card';
+	import {Badge} from '$lib/components/ui/badge';
+	import {Separator} from '$lib/components/ui/separator';
 
-	const projects: Project[] = [
-		{
-			id: 0,
-			name: 'COCO Extended',
-			description: 'Labeling COCO keypoints until your eyes bleed',
-			owner_id: 123,
-			assignee_id: 1234
-		},
-		{
-			id: 1,
-			name: 'Cats dataset',
-			description: 'Largest-ever cat dataset',
-			owner_id: 123
-		},
-		{
-			id: 2,
-			name: 'Limadication 1.0',
-			description: 'Do I really need to explain?',
-			owner_id: 123,
-			assignee_id: 1234
-		}
-	];
+	export let data;
 </script>
 
-<div class="container">
-	<p>Your projects in CVAT</p>
+<div class="container py-8">
+	<p class="pb-4">Found {data.projects.length} projects</p>
 	<nav>
 		<ul>
-			{#each projects as { id, name, description, owner_id, assignee_id }}
+			{#each data.projects as { id, name, owner, status, updated_date }}
 				<li class="project-listing">
-					<Card padding={0} shadowOnHover={true}>
+					<Card padding={0} shadowOnHover={true} class="hover:shadow-lg transition-shadow">
 						<a href={`/projects/${id}`}>
-							<img src="" alt="" />
-							<div class="description-card">
-								<h3>{name}</h3>
-								<p>{description}</p>
-								<div class="description-lower">
-									<span>ID: {id}</span>
-									<span>Owner: {owner_id}</span>
+							<img src="/coco.jpeg" alt="" class="rounded-md min-w-[140px]"/>
+							<div class="description-card p-3 px-1 w-full pr-8">
+								<div class="flex justify-between items-center pb-3">
+									<h3 class="text-xl">{name}</h3>
+									<span class="text-slate-500">ID: {id}</span>
+								</div>
+								<p class="status-indicator flex !gap-2 pb-2 items-center !text-slate-600">Status: <Badge variant="secondary">{status}</Badge></p>
+								<div class="description-lower pt-1">
+									<span class="text-slate-600">Owner: <span class="font-bold">{owner.username}</span></span>
+									<Separator orientation="vertical"/>
+									<span class="text-slate-600">Updated: <span class="font-bold">{updated_date.slice(0, 10)}</span></span>
 								</div>
 							</div>
 						</a>
@@ -59,13 +44,6 @@
 		width: 100%;
 	}
 
-	.container {
-		padding: 16px 24px 24px 24px;
-		display: flex;
-		flex-direction: column;
-		width: 100%;
-	}
-
 	ul {
 		list-style-type: none;
 		display: flex;
@@ -79,9 +57,9 @@
 
 	img {
 		background-color: darkred;
-		width: 160px;
-		height: 160px;
-		border-radius: 16px 0 0 16px;
+		width: 140px;
+		height: 140px;
+		border-radius: 15px 0 0 15px;
 	}
 
 	h3 {
@@ -93,9 +71,9 @@
 		color: #282828;
 	}
 
-	.description-lower {
+	.description-lower, .status-indicator {
 		font-size: 0.8615rem;
-		color: #4b4b4bff;
+		/*color: #4b4b4bff;*/
 		display: flex;
 		gap: 12px;
 	}
